@@ -79,7 +79,6 @@ installer/mkarchive
 installer/swftools-small.bmp
 installer/uninstall.exe
 lib/pdf/switch
-lib/pdf/xpdf*
 swfs/PreLoaderTemplate
 swfs/keyboard_viewer
 swfs/simple_viewer
@@ -92,3 +91,4 @@ tmp/
 src/ttftool
 _pypath.py
 _pypath.txt
+workspace.xml
