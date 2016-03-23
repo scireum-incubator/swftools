@@ -1,0 +1,80 @@
+***************
+*** 60,66 ****
+      throw GMemException();
+  #else
+      fprintf(stderr, "Invalid memory allocation size\n");
+-     exit(1);
+  #endif
+    }
+    if (size == 0) {
+--- 61,70 ----
+      throw GMemException();
+  #else
+      fprintf(stderr, "Invalid memory allocation size\n");
++     if(exit_on_error)
++ 	exit(1);
++     else
++ 	return NULL;
+  #endif
+    }
+    if (size == 0) {
+***************
+*** 96,102 ****
+      throw GMemException();
+  #else
+      fprintf(stderr, "Invalid memory allocation size\n");
+-     exit(1);
+  #endif
+    }
+    if (size == 0) {
+--- 103,112 ----
+      throw GMemException();
+  #else
+      fprintf(stderr, "Invalid memory allocation size\n");
++     if(exit_on_error)
++ 	exit(1);
++     else
++ 	return NULL;
+  #endif
+    }
+    if (size == 0) {
+***************
+*** 117,123 ****
+      throw GMemException();
+  #else
+      fprintf(stderr, "Invalid memory allocation size\n");
+-     exit(1);
+  #endif
+    }
+    if (size == 0) {
+--- 136,145 ----
+      throw GMemException();
+  #else
+      fprintf(stderr, "Invalid memory allocation size\n");
++     if(exit_on_error)
++ 	exit(1);
++     else
++ 	return NULL;
+  #endif
+    }
+    if (size == 0) {
+***************
+*** 144,150 ****
+      throw GMemException();
+  #else
+      fprintf(stderr, "Invalid memory allocation size\n");
+-     exit(1);
+  #endif
+    }
+    if (size == 0) {
+--- 166,175 ----
+      throw GMemException();
+  #else
+      fprintf(stderr, "Invalid memory allocation size\n");
++     if(exit_on_error)
++ 	exit(1);
++     else
++ 	return NULL;
+  #endif
+    }
+    if (size == 0) {

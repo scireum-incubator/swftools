@@ -1,0 +1,383 @@
+***************
+*** 682,691 ****
+    w = wA;
+    h = hA;
+    line = (wA + 7) >> 3;
+    if (w <= 0 || h <= 0 || line <= 0 || h >= (INT_MAX - 1) / line) {
+-     // force a call to gmalloc(-1), which will throw an exception
+-     h = -1;
+-     line = 2;
+    }
+    // need to allocate one extra guard byte for use in combine()
+    data = (Guchar *)gmalloc(h * line + 1);
+--- 700,710 ----
+    w = wA;
+    h = hA;
+    line = (wA + 7) >> 3;
++ 
+    if (w <= 0 || h <= 0 || line <= 0 || h >= (INT_MAX - 1) / line) {
++     error(-1, "invalid width/height");
++     data = NULL;
++     return;
+    }
+    // need to allocate one extra guard byte for use in combine()
+    data = (Guchar *)gmalloc(h * line + 1);
+***************
+*** 698,707 ****
+    w = bitmap->w;
+    h = bitmap->h;
+    line = bitmap->line;
+    if (w <= 0 || h <= 0 || line <= 0 || h >= (INT_MAX - 1) / line) {
+-     // force a call to gmalloc(-1), which will throw an exception
+-     h = -1;
+-     line = 2;
+    }
+    // need to allocate one extra guard byte for use in combine()
+    data = (Guchar *)gmalloc(h * line + 1);
+--- 717,727 ----
+    w = bitmap->w;
+    h = bitmap->h;
+    line = bitmap->line;
++ 
+    if (w <= 0 || h <= 0 || line <= 0 || h >= (INT_MAX - 1) / line) {
++     error(-1, "invalid width/height");
++     data = NULL;
++     return;
+    }
+    // need to allocate one extra guard byte for use in combine()
+    data = (Guchar *)gmalloc(h * line + 1);
+***************
+*** 1011,1023 ****
+  JBIG2SymbolDict::JBIG2SymbolDict(Guint segNumA, Guint sizeA):
+    JBIG2Segment(segNumA)
+  {
+-   Guint i;
+- 
+    size = sizeA;
+    bitmaps = (JBIG2Bitmap **)gmallocn(size, sizeof(JBIG2Bitmap *));
+-   for (i = 0; i < size; ++i) {
+-     bitmaps[i] = NULL;
+-   }
+    genericRegionStats = NULL;
+    refinementRegionStats = NULL;
+  }
+--- 1035,1043 ----
+  JBIG2SymbolDict::JBIG2SymbolDict(Guint segNumA, Guint sizeA):
+    JBIG2Segment(segNumA)
+  {
+    size = sizeA;
+    bitmaps = (JBIG2Bitmap **)gmallocn(size, sizeof(JBIG2Bitmap *));
++   if (!bitmaps) size = 0;
+    genericRegionStats = NULL;
+    refinementRegionStats = NULL;
+  }
+***************
+*** 1026,1034 ****
+    Guint i;
+  
+    for (i = 0; i < size; ++i) {
+-     if (bitmaps[i]) {
+-       delete bitmaps[i];
+-     }
+    }
+    gfree(bitmaps);
+    if (genericRegionStats) {
+--- 1046,1052 ----
+    Guint i;
+  
+    for (i = 0; i < size; ++i) {
++     delete bitmaps[i];
+    }
+    gfree(bitmaps);
+    if (genericRegionStats) {
+***************
+*** 1296,1301 ****
+        goto eofError2;
+      }
+  
+      // check for missing page information segment
+      if (!pageBitmap && ((segType >= 4 && segType <= 7) ||
+  			(segType >= 20 && segType <= 43))) {
+--- 1315,1323 ----
+        goto eofError2;
+      }
+  
++     // keep track of the start of the segment data 
++     segDataPos = getPos();
++ 
+      // check for missing page information segment
+      if (!pageBitmap && ((segType >= 4 && segType <= 7) ||
+  			(segType >= 20 && segType <= 43))) {
+***************
+*** 1839,1846 ****
+  	}
+  	numInputSyms += j;
+        } else if (seg->getType() == jbig2SegCodeTable) {
+- 	codeTables->append(seg);
+        }
+      }
+    }
+    if (numInputSyms > UINT_MAX - numNewSyms) {
+--- 1903,1913 ----
+  	}
+  	numInputSyms += j;
+        } else if (seg->getType() == jbig2SegCodeTable) {
++         codeTables->append(seg);
+        }
++     } else {
++       delete codeTables;
++       return gFalse;
+      }
+    }
+    if (numInputSyms > UINT_MAX - numNewSyms) {
+***************
+*** 1850,1860 ****
+    }
+  
+    // compute symbol code length
+-   symCodeLen = 1;
+-   i = (numInputSyms + numNewSyms) >> 1;
+-   while (i) {
+-     ++symCodeLen;
+-     i >>= 1;
+    }
+  
+    // get the input symbol bitmaps
+--- 1917,1930 ----
+    }
+  
+    // compute symbol code length
++   symCodeLen = 0;
++   i = 1;
++   while (i < numInputSyms + numNewSyms) {
++    ++symCodeLen;
++    i <<= 1;
++   }
++   if (huff && symCodeLen == 0) {
++    symCodeLen = 1;
+    }
+  
+    // get the input symbol bitmaps
+***************
+*** 1866,1877 ****
+    k = 0;
+    inputSymbolDict = NULL;
+    for (i = 0; i < nRefSegs; ++i) {
+-     if ((seg = findSegment(refSegs[i]))) {
+-       if (seg->getType() == jbig2SegSymbolDict) {
+- 	inputSymbolDict = (JBIG2SymbolDict *)seg;
+- 	for (j = 0; j < inputSymbolDict->getSize(); ++j) {
+- 	  bitmaps[k++] = inputSymbolDict->getBitmap(j);
+- 	}
+        }
+      }
+    }
+--- 1936,1946 ----
+    k = 0;
+    inputSymbolDict = NULL;
+    for (i = 0; i < nRefSegs; ++i) {
++     seg = findSegment(refSegs[i]);
++     if (seg != NULL && seg->getType() == jbig2SegSymbolDict) {
++       inputSymbolDict = (JBIG2SymbolDict *)seg;
++       for (j = 0; j < inputSymbolDict->getSize(); ++j) {
++ 	bitmaps[k++] = inputSymbolDict->getBitmap(j);
+        }
+      }
+    }
+***************
+*** 2089,2094 ****
+  
+    // create the symbol dict object
+    symbolDict = new JBIG2SymbolDict(segNum, numExSyms);
+  
+    // exported symbol list
+    i = j = 0;
+--- 2158,2167 ----
+  
+    // create the symbol dict object
+    symbolDict = new JBIG2SymbolDict(segNum, numExSyms);
++   if (!symbolDict->isOk()) {
++     delete symbolDict;
++     goto syntaxError;
++   }
+  
+    // exported symbol list
+    i = j = 0;
+***************
+*** 2102,2107 ****
+      if (i + run > numInputSyms + numNewSyms ||
+  	(ex && j + run > numExSyms)) {
+        error(getPos(), "Too many exported symbols in JBIG2 symbol dictionary");
+        delete symbolDict;
+        goto syntaxError;
+      }
+--- 2175,2181 ----
+      if (i + run > numInputSyms + numNewSyms ||
+  	(ex && j + run > numExSyms)) {
+        error(getPos(), "Too many exported symbols in JBIG2 symbol dictionary");
++       for ( ; j < numExSyms; ++j) symbolDict->setBitmap(j, NULL);
+        delete symbolDict;
+        goto syntaxError;
+      }
+***************
+*** 2116,2121 ****
+    }
+    if (j != numExSyms) {
+      error(getPos(), "Too few symbols in JBIG2 symbol dictionary");
+      delete symbolDict;
+      goto syntaxError;
+    }
+--- 2190,2196 ----
+    }
+    if (j != numExSyms) {
+      error(getPos(), "Too few symbols in JBIG2 symbol dictionary");
++     for ( ; j < numExSyms; ++j) symbolDict->setBitmap(j, NULL);
+      delete symbolDict;
+      goto syntaxError;
+    }
+***************
+*** 2324,2334 ****
+      error(getPos(), "Bad symbol dictionary reference in JBIG2 halftone segment");
+      return;
+    }
+-   if (!(seg = findSegment(refSegs[0])) ||
+-       seg->getType() != jbig2SegPatternDict) {
+      error(getPos(), "Bad symbol dictionary reference in JBIG2 halftone segment");
+      return;
+    }
+    patternDict = (JBIG2PatternDict *)seg;
+    bpp = 0;
+    i = 1;
+--- 2419,2430 ----
+      error(getPos(), "Bad symbol dictionary reference in JBIG2 halftone segment");
+      return;
+    }
++   seg = findSegment(refSegs[0]);
++   if (seg == NULL || seg->getType() != jbig2SegPatternDict) {
+      error(getPos(), "Bad symbol dictionary reference in JBIG2 halftone segment");
+      return;
+    }
++ 
+    patternDict = (JBIG2PatternDict *)seg;
+    bpp = 0;
+    i = 1;
+***************
+*** 2484,2489 ****
+    // read the bitmap
+    bitmap = readGenericBitmap(mmr, w, h, templ, tpgdOn, gFalse,
+  			     NULL, atx, aty, mmr ? length - 18 : 0);
+  
+    // combine the region bitmap into the page bitmap
+    if (imm) {
+--- 2580,2587 ----
+    // read the bitmap
+    bitmap = readGenericBitmap(mmr, w, h, templ, tpgdOn, gFalse,
+  			     NULL, atx, aty, mmr ? length - 18 : 0);
++   if (!bitmap)
++     return;
+  
+    // combine the region bitmap into the page bitmap
+    if (imm) {
+***************
+*** 2509,2515 ****
+  				      int *codingLine, int *a0i, int w) {
+    if (a1 > codingLine[*a0i]) {
+      if (a1 > w) {
+-       error(getPos(), "JBIG2 MMR row is wrong length ({0:d})", a1);
+        a1 = w;
+      }
+      if ((*a0i & 1) ^ blackPixels) {
+--- 2607,2613 ----
+  				      int *codingLine, int *a0i, int w) {
+    if (a1 > codingLine[*a0i]) {
+      if (a1 > w) {
++       error(getPos(), "JBIG2 MMR row is wrong length (%d)", a1);
+        a1 = w;
+      }
+      if ((*a0i & 1) ^ blackPixels) {
+***************
+*** 2523,2529 ****
+  					 int *codingLine, int *a0i, int w) {
+    if (a1 > codingLine[*a0i]) {
+      if (a1 > w) {
+-       error(getPos(), "JBIG2 MMR row is wrong length ({0:d})", a1);
+        a1 = w;
+      }
+      if ((*a0i & 1) ^ blackPixels) {
+--- 2621,2627 ----
+  					 int *codingLine, int *a0i, int w) {
+    if (a1 > codingLine[*a0i]) {
+      if (a1 > w) {
++       error(getPos(), "JBIG2 MMR row is wrong length (%d)", a1);
+        a1 = w;
+      }
+      if ((*a0i & 1) ^ blackPixels) {
+***************
+*** 2550,2562 ****
+    JBIG2Bitmap *bitmap;
+    GBool ltp;
+    Guint ltpCX, cx, cx0, cx1, cx2;
+-   JBIG2BitmapPtr cxPtr0, cxPtr1;
+-   JBIG2BitmapPtr atPtr0, atPtr1, atPtr2, atPtr3;
+    int *refLine, *codingLine;
+    int code1, code2, code3;
+    int x, y, a0i, b1i, blackPixels, pix, i;
+  
+    bitmap = new JBIG2Bitmap(0, w, h);
+    bitmap->clearToZero();
+  
+    //----- MMR decode
+--- 2648,2664 ----
+    JBIG2Bitmap *bitmap;
+    GBool ltp;
+    Guint ltpCX, cx, cx0, cx1, cx2;
++   JBIG2BitmapPtr cxPtr0 = {0}, cxPtr1 = {0};
++   JBIG2BitmapPtr atPtr0 = {0}, atPtr1 = {0}, atPtr2 = {0}, atPtr3 = {0};
+    int *refLine, *codingLine;
+    int code1, code2, code3;
+    int x, y, a0i, b1i, blackPixels, pix, i;
+  
+    bitmap = new JBIG2Bitmap(0, w, h);
++   if (!bitmap->isOk()) {
++     delete bitmap;
++     return NULL;
++   }
+    bitmap->clearToZero();
+  
+    //----- MMR decode
+***************
+*** 2575,2581 ****
+      // ---> max refLine size = w + 2
+      codingLine = (int *)gmallocn(w + 1, sizeof(int));
+      refLine = (int *)gmallocn(w + 2, sizeof(int));
+-     codingLine[0] = w;
+  
+      for (y = 0; y < h; ++y) {
+  
+--- 2677,2683 ----
+      // ---> max refLine size = w + 2
+      codingLine = (int *)gmallocn(w + 1, sizeof(int));
+      refLine = (int *)gmallocn(w + 2, sizeof(int));
++     for (i = 0; i < w + 1; ++i) codingLine[i] = w;
+  
+      for (y = 0; y < h; ++y) {
+  
+***************
+*** 2986,2993 ****
+      return;
+    }
+    if (nRefSegs == 1) {
+-     if (!(seg = findSegment(refSegs[0])) ||
+- 	seg->getType() != jbig2SegBitmap) {
+        error(getPos(), "Bad bitmap reference in JBIG2 generic refinement segment");
+        return;
+      }
+--- 3088,3095 ----
+      return;
+    }
+    if (nRefSegs == 1) {
++     seg = findSegment(refSegs[0]);
++     if (seg == NULL || seg->getType() != jbig2SegBitmap) {
+        error(getPos(), "Bad bitmap reference in JBIG2 generic refinement segment");
+        return;
+      }
