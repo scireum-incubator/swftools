@@ -2881,7 +2881,9 @@ static SWFFONT* gfxfont_to_swffont(gfxfont_t*font, const char* id, int version)
 	    /* flash 8 flashtype requires unique unicode IDs for each character.
 	       We use the Unicode private user area to assign characters, hoping that
 	       the font doesn't contain more than 8192 glyphs */
-	    u = 0xe000 + (t&0x1fff);
+
+        // Fix by <scireum>: changed t to u which makes way more sense... (hopefully)
+	    u = 0xe000 + (u&0x1fff);
 	}
 	swffont->glyph2ascii[t] = u;
 
