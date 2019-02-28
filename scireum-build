@@ -1,0 +1,24 @@
+#!/bin/bash
+
+apt-get update
+apt-get install -y  build-essential zlib1g-dev libfreetype6-dev libxft-dev libjpeg-dev libgif-dev ruby ruby-dev
+gem install --no-ri --no-rdoc fpm
+gem install --no-ri --no-rdoc deb-s3
+
+mkdir -p target/usr
+./configure --prefix=$(pwd)/target/usr
+make
+# run make twice, it fails first
+make
+make install
+
+cd target
+fpm -s dir -t deb --deb-pre-depends zlib1g,libfreetype6,libxft2,libjpeg62,libgif7 -n scireum-swftools -v 1.0-1 .
+cd ..
+ls -al target
+
+deb-s3 upload --arch=${ARCH} \
+  --bucket=${S3_BUCKET} \
+  --codename=${CODENAME} \
+  --s3-region=${S3_REGION} \
+  --sign=${REPO_KEY_ID} target/scireum-swftools*.deb
